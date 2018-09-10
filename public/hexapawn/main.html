@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <style>
+        table{
+            background-color: #955600;
+        }
+        .box {
+            background-color: rgba(255,0,6,0.85);
+            width: 80px;
+            height: 80px;
+            text-align: center;
+            border: 3px solid black;
+        }
+
+        .fa-circle {
+            font-size: 54px;
+            color: #de0300;
+        }
+
+        .fa-times {
+            font-size: 64px;
+            color: #0600b8;
+        }
+
+        .overlay {
+            position: absolute;
+            width: 270px;
+            height: 270px;
+            display: none;
+        }
+
+        #wallaper {
+            opacity: 0;
+            background-color: black;
+        }
+        .box img{
+            width: 75px;
+        }
+
+        .box.selected{
+            border-style: dashed;
+        }
+
+        .box.black{
+            background-color: #00990d;
+        }
+    </style>
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/all.css"
+          integrity="sha384-mzrmE5qonljUremFsqc01SB46JvROS7bZs3IO2EmfFsd15uHvIt+Y8vEf7N7fWAU" crossorigin="anonymous">
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+</head>
+<body>
+
+<next>Wait please...</next>
+<div class="overlay" id="wallaper"></div>
+<div class="overlay" style="position: absolute; width: 270px; height: 270px; text-align: center; vertical-align: center; color: #ffffff">
+    <h2 style="width: 220px; margin-left: 25px; margin-top: 80px">Another player has disconnected</h2>
+</div>
+<table class="one">
+    <tbody>
+    <tr>
+        <td class="box" id="0-0"><img src="assets/img/b.png"></td>
+        <td class="box black" id="0-1"><img src="assets/img/b.png"></td>
+        <td class="box" id="0-2"><img src="assets/img/b.png"></td>
+    </tr>
+    <tr>
+        <td class="box black" id="1-0"></td>
+        <td class="box" id="1-1"></td>
+        <td class="box black" id="1-2"></td>
+    </tr>
+    <tr>
+        <td class="box" id="2-0"><img class="my" src="assets/img/w.png"></td>
+        <td class="box black" id="2-1"><img class="my" src="assets/img/w.png"></td>
+        <td class="box" id="2-2"><img class="my" src="assets/img/w.png"></td>
+    </tr>
+    </tbody>
+</table>
+
+<table class="another" style="display: none">
+    <tbody>
+    <tr>
+        <td class="box" id="2-2"><img src="assets/img/w.png"></td>
+        <td class="box black" id="2-1"><img src="assets/img/w.png"></td>
+        <td class="box" id="2-0"><img src="assets/img/w.png"></td>
+    </tr>
+    <tr>
+        <td class="box black" id="1-2"></td>
+        <td class="box" id="1-1"></td>
+        <td class="box black" id="1-0"></td>
+    </tr>
+    <tr>
+        <td class="box" id="0-2"><img class="my" src="assets/img/b.png"></td>
+        <td class="box black" id="0-1"><img class="my" src="assets/img/b.png"></td>
+        <td class="box" id="0-0"><img class="my" src="assets/img/b.png"></td>
+    </tr>
+    </tbody>
+</table>
+
+
+<status>Waiting for another player...</status>
+<br><br>
+<winner></winner>
+
+<a id="refresher" href="/hexapawn/">Find new game</a>
+
+<script>
+
+    function showTurn() {
+        $.ajax({
+            url: "http://" + location.host + "/api/" + game.Token + "/next_turn/",
+            success: function (data) {
+                if ($("winner").text() != "") {
+                    return;
+                } else if (data == game.Role) {
+                    $("next").text("Your turn. Make right decision!");
+                } else if (data != game.Role){
+                    $("next").text("Wait for your turn.");
+                }else {
+                    $("next").text("Wait please...");
+                }
+            }
+        });
+    }
+
+    function getSocket(str) {
+        return new WebSocket(str);
+    }
+
+    var game = "";
+
+    var socket = null;
+
+    function getIcon(role) {
+        if (role == 1) {
+            return '<img class="' + (role == game.Role ? 'my' : '') + '" src="assets/img/w.png">';
+        } else if (role == 2) {
+            return '<img class="' + (role == game.Role ? 'my' : '') + '" src="assets/img/b.png">';
+        }
+        return ' ';
+    }
+
+   $(document).ready(function () {
+        $.ajax({
+            url: "http://" + location.host + "/new/hexapawn/",
+            cache: false,
+            sync: true,
+            success: function (data) {
+                game = data;
+                if(game.Role == 2){
+                    $(".one").hide();
+                    $(".one").html("");
+                    $(".another").show();
+                }
+                socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/");
+                socket.onclose = function (event) {
+                    if (event.wasClean) {
+                        $(".overlay").show();
+                        $("#wallaper").fadeTo("slow", 0.6);
+                    } else {
+                        $(".overlay").show();
+                        $("#wallaper").fadeTo("slow", 0.6);
+                    }
+                };
+
+                socket.onmessage = function (event) {
+                    console.log(event.data)
+                    if (event.data == '"?"\n') {
+                        socket.send("!");
+                    }
+                    else if (event.data == '"1"\n') {
+                        $("status").html("Player 2 connected");
+                        socket.send('2');
+                        showTurn();
+                    } else if (event.data == '"2"\n') {
+                        showTurn();
+                        $("status").html("Player 1 connected");
+                    } else if (event.data.substr(0, 2) == '"W') {
+                        $("winner").html("We got a wwwwwwwwwwwwwwiner!!!<br> And it's " + (game.Role == event.data[2] ? "<b style='color:green'>You</b>!" : "<b style='color:red'>not you</b>:("));
+                        $("next").text("End of game!");
+                        $(".box").unbind();
+                        $("#refresher").show();
+                    } else {
+                        showTurn();
+                        data = $.parseJSON(event.data);
+                        for (var i = 0; i < data.length; i++) {
+                            for (var j = 0; j < data.length; j++) {
+                                $("#" + i + "-" + j).html(getIcon(data[i][j]))
+                            }
+                        }
+                    }
+                };
+            }
+        });
+       var begin = "";
+       var end = "";
+        $(".box").click(function () {
+            if(begin == ""){
+                if($(this).find(".my").length == 0){
+                    return
+                }
+                begin = [parseInt($(this).attr("id").split("-")[0]), parseInt($(this).attr("id").split("-")[1])];
+                $(this).addClass("selected");
+            }else{
+                var err = false;
+                end = [parseInt($(this).attr("id").split("-")[0]), parseInt($(this).attr("id").split("-")[1])];
+                $.ajax({
+                    url: "http://" + location.host + "/api/" + game.Token + "/turn/" + game.Role + "/",
+                    data: JSON.stringify(begin.concat(end)),
+                    cache: false,
+                    type: "POST",
+                    contentType: "application/json",
+                    error: err = true,
+                });
+                if(err){
+                    $("#" + begin[0] + "-" + begin[1]).removeClass("selected");
+                }
+                begin = "";
+                end = "";
+            }
+        });
+
+    });
+
+</script>
+
+</body>
+</html>

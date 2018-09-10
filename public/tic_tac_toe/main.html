@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <style>
+        .box {
+            background-color: gainsboro;
+            width: 80px;
+            height: 80px;
+            text-align: center;
+        }
+
+        .fa-circle {
+            font-size: 54px;
+            color: #de0300;
+        }
+
+        .fa-times {
+            font-size: 64px;
+            color: #0600b8;
+        }
+
+        .overlay {
+            position: absolute;
+            width: 420px;
+            height: 420px;
+            display: none;
+        }
+
+        #wallaper {
+            opacity: 0;
+            background-color: black;
+        }
+    </style>
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/all.css"
+          integrity="sha384-mzrmE5qonljUremFsqc01SB46JvROS7bZs3IO2EmfFsd15uHvIt+Y8vEf7N7fWAU" crossorigin="anonymous">
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+</head>
+<body>
+
+<next>Wait please...</next>
+<div class="overlay" id="wallaper"></div>
+<div class="overlay" style="position: absolute; width: 420px; height: 420px; text-align: center; vertical-align: center; color: #ffffff">
+    <h2 style="width: 220px; margin-left: 90px; margin-top: 150px">Another player has disconnected</h2>
+</div>
+<table>
+    <tbody>
+    <tr>
+        <td class="box" id="0-0"></td>
+        <td class="box" id="0-1"></td>
+        <td class="box" id="0-2"></td>
+        <td class="box" id="0-3"></td>
+        <td class="box" id="0-4"></td>
+    </tr>
+    <tr>
+        <td class="box" id="1-0"></td>
+        <td class="box" id="1-1"></td>
+        <td class="box" id="1-2"></td>
+        <td class="box" id="1-3"></td>
+        <td class="box" id="1-4"></td>
+    </tr>
+    <tr>
+        <td class="box" id="2-0"></td>
+        <td class="box" id="2-1"></td>
+        <td class="box" id="2-2"></td>
+        <td class="box" id="2-3"></td>
+        <td class="box" id="2-4"></td>
+    </tr>
+    <tr>
+        <td class="box" id="3-0"></td>
+        <td class="box" id="3-1"></td>
+        <td class="box" id="3-2"></td>
+        <td class="box" id="3-3"></td>
+        <td class="box" id="3-4"></td>
+    </tr>
+    <tr>
+        <td class="box" id="4-0"></td>
+        <td class="box" id="4-1"></td>
+        <td class="box" id="4-2"></td>
+        <td class="box" id="4-3"></td>
+        <td class="box" id="4-4"></td>
+    </tr>
+    </tbody>
+</table>
+
+
+<status>Waiting for another player...</status>
+<br><br>
+<winner></winner>
+
+<a id="refresher" href="/tictactoe/">Find new game</a>
+
+<script>
+
+    function showTurn() {
+        $.ajax({
+            url: "http://" + location.host + "/api/" + game.Token + "/next_turn/",
+            success: function (data) {
+                if ($("winner").text() != "") {
+                    return;
+                } else if (data == game.Role) {
+                    $("next").text("Your turn. Make right decision!");
+                } else if (data != game.Role){
+                    $("next").text("Wait for your turn.");
+                }else {
+                    $("next").text("Wait please...");
+                }
+            }
+        });
+    }
+
+    function getSocket(str) {
+        return new WebSocket(str);
+    }
+
+    var game = "";
+
+    var socket = null;
+
+    function getIcon(role) {
+        if (role == 1) {
+            return '<i class="fas fa-times"></i>';
+        } else if (role == 2) {
+            return '<i class="far fa-circle"></i>';
+        }
+        return ' ';
+    }
+
+    $(document).ready(function () {
+        $.ajax({
+            url: "http://" + location.host + "/new/tic_tac_toe/",
+            cache: false,
+            sync: true,
+            success: function (data) {
+                game = data;
+                socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/");
+                socket.onclose = function (event) {
+                    if (event.wasClean) {
+                        $(".overlay").show();
+                        $("#wallaper").fadeTo("slow", 0.6);
+                    } else {
+                        $(".overlay").show();
+                        $("#wallaper").fadeTo("slow", 0.6);
+                    }
+                };
+
+
+                socket.onmessage = function (event) {
+                    if (event.data == '"?"\n') {
+                        socket.send("!");
+                    }
+                    else if (event.data == '"1"\n') {
+                        $("status").html("Player 2 connected");
+                        socket.send('2');
+                        showTurn();
+                    } else if (event.data == '"2"\n') {
+                        showTurn();
+                        $("status").html("Player 1 connected");
+                    } else if (event.data.substr(0, 2) == '"W') {
+                        $("winner").html("We got a wwwwwwwwwwwwwwiner!!!<br> And it's " + (game.Role == event.data[2] ? "<b style='color:green'>You</b>!" : "<b style='color:red'>not you</b>:("));
+                        $("next").text("End of game!");
+                        $(".box").unbind();
+                        $("#refresher").show();
+                    } else {
+                        showTurn();
+                        data = $.parseJSON(event.data);
+                        for (var i = 0; i < data.length; i++) {
+                            for (var j = 0; j < data.length; j++) {
+                                $("#" + i + "-" + j).html(getIcon(data[i][j]))
+                            }
+                        }
+                    }
+                };
+            }
+        });
+
+        $(".box").click(function () {
+            var temp = $(this).html();
+            var turn = [parseInt($(this).attr("id").split("-")[0]), parseInt($(this).attr("id").split("-")[1])];
+            $(this).html('<img src="assets/img/loading.gif">');
+            $.ajax({
+                url: "http://" + location.host + "/api/" + game.Token + "/turn/" + game.Role + "/",
+                data: JSON.stringify(turn),
+                cache: false,
+                type: "POST",
+                contentType: "application/json",
+                error: $(this).html(temp),
+                success: function (res) {
+                    $(this).html(toString(game.Role));
+                }
+            });
+        });
+    });
+
+</script>
+
+</body>
+</html>
