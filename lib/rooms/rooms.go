@@ -1,6 +1,7 @@
 package rooms
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/gorilla/websocket"
 	"go-rooms/games"
@@ -12,18 +13,14 @@ import (
 	"time"
 )
 
-func init() {
-	go checker()
-}
-
 type Room struct {
-	Turn         int
-	Game         interfaces.Game
-	FirstSocket  *websocket.Conn
-	SecondSocket *websocket.Conn
+	Turn    int
+	Game    interfaces.Game
+	Member1 Client
+	Member2 Client
 }
 
-var rooms = make(map[string]Room)
+var rooms = make(map[string]*Room)
 
 var queue struct {
 	Body []string
@@ -31,15 +28,15 @@ var queue struct {
 }
 
 /**
-	removes room from map and queue(if its exist there)
- */
+removes room from map and queue(if its exist there)
+*/
 func closeRoom(token string) {
 	r, _ := rooms[token]
-	if r.FirstSocket != nil {
-		r.FirstSocket.Close()
+	if r.Member1.Alive {
+		r.Member1.close()
 	}
-	if r.SecondSocket != nil {
-		r.SecondSocket.Close()
+	if r.Member2.Alive {
+		r.Member2.close()
 	}
 	delete(rooms, token)
 	queue.mux.Lock()
@@ -50,46 +47,39 @@ func closeRoom(token string) {
 		}
 	}
 	queue.mux.Unlock()
-
 }
 
 /*
 	daemon. removes rooms, where client closed connection
- */
-func checker() {
+*/
+func checker(token string) {
+	r, _ := rooms[token]
 	for {
-		time.Sleep(time.Second * 5)
-		for token, r := range rooms {
-			if clientClosedConnection(r.FirstSocket) || clientClosedConnection(r.SecondSocket) {
-				closeRoom(token)
-			}
+		time.Sleep(time.Second / 2)
+		if r.Member1.closedConnection() || r.Member2.closedConnection() {
+			closeRoom(token)
+			break
 		}
+
 	}
 }
 
 /**
-	pings client and tries to recieve message
- */
-func clientClosedConnection(conn *websocket.Conn) bool {
-	if conn == nil {
-		return false
+send turn params to game, switches player and notifies players if game ended
+*/
+func (r *Room) TurnHandler(player string, params ...int) (bool, error) {
+	var role = 0
+	if r.Member1.Token == player {
+		role = 1
+	} else if r.Member2.Token == player {
+		role = 2
+	} else {
+		return false, errors.New("at room with token A is no player with token B")
 	}
-	conn.WriteJSON("?")
-	_, _, err := conn.ReadMessage()
-	if err != nil {
-		return true
+	if role != r.Turn {
+		return false, errors.New("not this player's turn")
 	}
-	return false
-}
-
-/**
-	send turn params to game, switches player and notifies players if game ended
- */
-func (r *Room) TurnHandler(params ... int) (bool, error) {
-	if params[0] != r.Turn {
-		return false, errors.New("not this players turn")
-	}
-	ok, err := r.Game.Turn(params...)
+	ok, err := r.Game.Turn(append([]int{role}, params...)...)
 	if err != nil {
 		return false, err
 	}
@@ -98,24 +88,29 @@ func (r *Room) TurnHandler(params ... int) (bool, error) {
 	} else {
 		r.Turn = 1
 	}
+	if ok {
+		msg, _ := json.Marshal(r.Game.GetGrid())
+		r.Member1.send(string(msg))
+		r.Member2.send(string(msg))
+	}
 	if winner := r.Game.GetWinner(); winner != 0 {
-		r.FirstSocket.WriteJSON("W" + strconv.Itoa(winner))
-		r.SecondSocket.WriteJSON("W" + strconv.Itoa(winner))
+		r.Member1.send("W" + strconv.Itoa(winner))
+		r.Member2.send("W" + strconv.Itoa(winner))
 	}
 	return ok, nil
 }
 
 /**
-	finds place in room in queue or returns new room
-	returns game interface and role
- */
+finds place in room in queue or returns new room
+returns game interface and role
+*/
 func FindRoom(gameName string) (string, int) {
 	if len(queue.Body) != 0 {
 		queue.mux.Lock()
 		for i, token := range queue.Body {
 			r, _ := rooms[token]
 			if strings.Compare(r.Game.GetName(), gameName) == 0 {
-				if clientClosedConnection(r.FirstSocket) {
+				if r.Member1.closedConnection() {
 					queue.Body = append(queue.Body[:i], queue.Body[i+1:]...)
 					queue.mux.Unlock()
 					return FindRoom(gameName)
@@ -131,48 +126,69 @@ func FindRoom(gameName string) (string, int) {
 }
 
 /**
-	creates new room push it to queue
-	returns token
- */
+creates new room push it to queue
+returns token
+*/
 func createRoom(gameName string) (token string) {
 	token = generateToken()
-	newGame := Room{1, games.GetInstance(gameName), nil, nil}
+	newGame := Room{1, games.GetInstance(gameName), Client{Alive: false}, Client{Alive: false}}
 	newGame.Game.Initialize()
-	rooms[token] = newGame
+	rooms[token] = &newGame
 	queue.mux.Lock()
 	queue.Body = append(queue.Body, token)
 	queue.mux.Unlock()
 	return token
 }
 
-func GetRoom(token string) (Room, bool) {
+func GetRoom(token string) (*Room, bool) {
 	res, ok := rooms[token]
 	return res, ok
 }
 
-func SetRoom(token string, val Room) {
-	rooms[token] = val
+/**
+links COMMON connection to member of specified room
+*/
+func NewMessageConnection(token string, conn *websocket.Conn) {
+	if r, ok := rooms[token]; ok {
+		if !r.Member1.Alive {
+			r.Member1.msgConn = conn
+			r.Member1.Token = generateToken()
+			r.Member1.send(r.Member1.Token)
+		} else {
+			if r.Member2.msgConn != nil {
+				r.Member2.pingConn = conn
+				r.Member2.Alive = true
+				r.Member1.send("Connected")
+				r.Member2.send("Connected")
+			} else {
+				r.Member2.msgConn = conn
+				r.Member2.Token = generateToken()
+				r.Member2.send(r.Member2.Token)
+			}
+		}
+	}
 }
 
 /**
-	links connection to room by token
- */
-func NewConnection(token string, conn *websocket.Conn) {
-	if r, ok := rooms[string(token)]; ok {
-		if r.FirstSocket == nil {
-			r.FirstSocket = conn
-			rooms[token] = r
-		} else {
-			r.SecondSocket = conn
-			rooms[token] = r
-			r.FirstSocket.WriteJSON("1")
-			_, msg, _ := r.FirstSocket.ReadMessage()
-			r.SecondSocket.WriteJSON(string(msg))
+links PING/PONG connection to member of specified room
+*/
+func NewPingConnection(roomToken, playerToken string, conn *websocket.Conn) {
+	if r, ok := rooms[roomToken]; ok {
+		if r.Member1.Token == playerToken {
+			r.Member1.pingConn = conn
+			r.Member1.Alive = true
+			go checker(roomToken)
+		} else if r.Member2.Token == playerToken {
+			r.Member2.pingConn = conn
+			r.Member2.Alive = true
+			r.Member1.send("Connected")
+			r.Member2.send("Connected")
 		}
 	}
 }
 
 func generateToken() string {
+	rand.Seed(time.Now().UTC().UnixNano())
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, 24)
 	for i := range b {

@@ -13,9 +13,9 @@ import (
 )
 
 /**
-	handler.
-	Returns JSON token and role as struct
- */
+handler.
+Returns JSON token and role as struct
+*/
 func findGame(gameName string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var g struct {
@@ -29,9 +29,9 @@ func findGame(gameName string) func(c *gin.Context) {
 }
 
 /**
-	hadler.
-	Returns JSON field to client as 2d array
- */
+hadler.
+Returns JSON field to client as 2d array
+*/
 func getGrid(c *gin.Context) {
 	token, ok := c.Params.Get("room")
 	if !ok {
@@ -46,42 +46,30 @@ func getGrid(c *gin.Context) {
 }
 
 /**
-	handler.
-	Accepts parameters as sarray of ints.
-	Returns http codes
- */
+handler.
+Accepts parameters as sarray of ints.
+Returns http codes
+*/
 func action(c *gin.Context) {
 	var params []int
 	token, ok1 := c.Params.Get("room")
-	role, ok2 := c.Params.Get("role")
+	player, ok2 := c.Params.Get("player")
 	if !(ok1 && ok2) {
 		c.AbortWithStatus(400)
 		return
 	}
-	intRole, err := strconv.Atoi(role)
-	if err != nil {
-		c.AbortWithError(400, err)
-	}
 	c.ShouldBindJSON(&params)
-	params = append([]int{intRole}, params...)
 	r, ok := rooms.GetRoom(token)
 	if !ok {
 		c.AbortWithStatus(404)
 		return
 	}
-	ok, err = r.TurnHandler(params...)
+	ok, err := r.TurnHandler(player, params...)
 	if err != nil {
 		c.AbortWithStatus(200)
 		return
 	}
-	c.JSON(200, ok)
-	r.FirstSocket.WriteJSON(r.Game.GetGrid())
-	if r.SecondSocket != nil {
-		r.SecondSocket.WriteJSON(r.Game.GetGrid())
-	}
-	rooms.SetRoom(token, r)
 	c.AbortWithStatus(200)
-	c.JSON(200, "{}")
 }
 
 var wsupgrader = websocket.Upgrader{
@@ -90,26 +78,31 @@ var wsupgrader = websocket.Upgrader{
 }
 
 /**
-	Web-socket handler
-	Handle connection and stores it to specific room
- */
+Web-socket handler
+Handle connection and stores it to specific room
+*/
 func wshandler(c *gin.Context) {
 	conn, err := wsupgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	token, ok := c.Params.Get("room")
+	roomToken, ok := c.Params.Get("room")
 	if !ok {
 		c.AbortWithStatus(400)
 		return
 	}
-	rooms.NewConnection(string(token), conn)
+	playerToken, ok := c.Params.Get("player")
+	if ok {
+		rooms.NewPingConnection(string(roomToken), string(playerToken), conn)
+	} else {
+		rooms.NewMessageConnection(string(roomToken), conn)
+	}
 }
 
 /**
-	handelr
-	Returns string number of player by rooms token
- */
+handelr
+Returns string number of player by rooms token
+*/
 func getTurn(c *gin.Context) {
 	token, ok := c.Params.Get("room")
 	if !ok {
@@ -130,12 +123,13 @@ func main() {
 	router := gin.Default()
 
 	router.GET("/ws/:room/", wshandler)
+	router.GET("/ws/:room/:player/", wshandler)
 
 	router.GET("/api/:room/", getGrid)
 	router.GET("/api/:room/next_turn/", getTurn)
 	router.GET("/new/tic_tac_toe/", findGame("tic_tac_toe"))
 	router.GET("/new/hexapawn/", findGame("hexapawn"))
-	router.POST("/api/:room/turn/:role/", action)
+	router.POST("/api/:room/turn/:player/", action)
 
 	files, err := ioutil.ReadDir("./games")
 

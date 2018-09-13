@@ -133,7 +133,11 @@
 
     var game = "";
 
-    var socket = null;
+    var msg_socket = null;
+
+    var ping_socket = null;
+
+    var player_token = "";
 
     function getIcon(role) {
         if (role == 1) {
@@ -156,8 +160,8 @@
                     $(".one").html("");
                     $(".another").show();
                 }
-                socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/");
-                socket.onclose = function (event) {
+                msg_socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/");
+                msg_socket.onclose = function (event) {
                     if (event.wasClean) {
                         $(".overlay").show();
                         $("#wallaper").fadeTo("slow", 0.6);
@@ -167,32 +171,31 @@
                     }
                 };
 
-                socket.onmessage = function (event) {
-                    console.log(event.data)
-                    if (event.data == '"?"\n') {
-                        socket.send("!");
-                    }
-                    else if (event.data == '"1"\n') {
-                        $("status").html("Player 2 connected");
-                        socket.send('2');
-                        showTurn();
-                    } else if (event.data == '"2"\n') {
-                        showTurn();
-                        $("status").html("Player 1 connected");
-                    } else if (event.data.substr(0, 2) == '"W') {
-                        $("winner").html("We got a wwwwwwwwwwwwwwiner!!!<br> And it's " + (game.Role == event.data[2] ? "<b style='color:green'>You</b>!" : "<b style='color:red'>not you</b>:("));
-                        $("next").text("End of game!");
-                        $(".box").unbind();
-                        $("#refresher").show();
-                    } else {
-                        showTurn();
-                        data = $.parseJSON(event.data);
-                        for (var i = 0; i < data.length; i++) {
-                            for (var j = 0; j < data.length; j++) {
-                                $("#" + i + "-" + j).html(getIcon(data[i][j]))
+                msg_socket.onmessage = function (event) {
+                    player_token = event.data;
+                    ping_socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/" + player_token + "/");
+                    ping_socket.onmessage = function () {
+                        ping_socket.send(1);
+                    };
+                    msg_socket.onmessage = function (event) {
+                        if (event.data[0] == 'W') {
+                            $("winner").html("We got a wwwwwwwwwwwwwwiner!!!<br> And it's " + (game.Role == event.data[1] ? "<b style='color:green'>You</b>!" : "<b style='color:red'>not you</b>:("));
+                            $("next").text("End of game!");
+                            $(".box").unbind();
+                            $("#refresher").show();
+                        } else if(event.data == "Connected"){
+                            $("status").html("Player connected");
+                            showTurn();
+                        } else {
+                            showTurn();
+                            data = $.parseJSON(event.data);
+                            for (var i = 0; i < data.length; i++) {
+                                for (var j = 0; j < data.length; j++) {
+                                    $("#" + i + "-" + j).html(getIcon(data[i][j]))
+                                }
                             }
                         }
-                    }
+                    };
                 };
             }
         });
@@ -209,7 +212,7 @@
                 var err = false;
                 end = [parseInt($(this).attr("id").split("-")[0]), parseInt($(this).attr("id").split("-")[1])];
                 $.ajax({
-                    url: "http://" + location.host + "/api/" + game.Token + "/turn/" + game.Role + "/",
+                    url: "http://" + location.host + "/api/" + game.Token + "/turn/" + player_token + "/",
                     data: JSON.stringify(begin.concat(end)),
                     cache: false,
                     type: "POST",
