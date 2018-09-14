@@ -90,12 +90,15 @@ func main() {
 	router.GET("/new/:game/", findGame)
 	router.POST("/api/:room/action/:player/", action)
 
-	router.StaticFile("/shiii/", "public/template.tmpl")
-	router.Static("/assets", "public/assets/")
-
 	// presentation files ----------------------------
 
+	router.Static("/assets", "public/assets/")
+
 	router.LoadHTMLGlob("public/template.tmpl")
+
+	router.GET("/", func(c *gin.Context) {
+		c.HTML(200, "template.tmpl", gin.H{"content": ""})
+	})
 
 	router.GET("/1/", func(c *gin.Context) {
 		c.HTML(200, "template.tmpl", gin.H{"content": "tic_tac_toe"})

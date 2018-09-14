@@ -11,18 +11,33 @@ function Rooms (gameName){
 
     this.player_token = "";
 
+    // next 4 guys is all, that you need to use
+
+    // copy of WebSoket().onclose
     this.onclose = function(event){
 
     };
 
-    this.onconnect = function(){
+    /**
+     * redefine this in your code
+     * @param data contains 1 if you're first member of room and 2 otherwise
+     */
+    this.onconnect = function(data){
 
     };
 
-    this.onmessage = function (event) {
+    /**
+     * redefine this in your code
+     * @param data contains json message from your game
+     */
+    this.onmessage = function (data) {
 
     };
 
+    /**
+     * sends json to game
+     * @param object json object
+     */
     this.send = function (object) {
         $.ajax({
             url: "http://" + location.host + "/api/" + this.room_token + "/action/" + this.player_token + "/",
