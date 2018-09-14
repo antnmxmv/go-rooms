@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -9,40 +8,20 @@ import (
 	"go-rooms/lib/rooms"
 	"io/ioutil"
 	"log"
-	"strconv"
 )
 
 /**
 handler.
 Returns JSON token and role as struct
 */
-func findGame(gameName string) func(c *gin.Context) {
-	return func(c *gin.Context) {
-		var g struct {
-			Token string
-			Role  int
-		}
-		g.Token, g.Role = rooms.FindRoom(gameName)
-		c.JSON(200, g)
-		c.AbortWithStatus(200)
-	}
-}
-
-/**
-hadler.
-Returns JSON field to client as 2d array
-*/
-func getGrid(c *gin.Context) {
-	token, ok := c.Params.Get("room")
+func findGame(c *gin.Context) {
+	gameName, ok := c.Params.Get("game")
 	if !ok {
 		c.AbortWithStatus(400)
 		return
 	}
-	if r, ok := rooms.GetRoom(token); ok {
-		c.JSON(200, r.Game.GetGrid())
-	} else {
-		c.AbortWithError(200, errors.New("waiting for another player"))
-	}
+	c.Writer.Write([]byte(rooms.FindRoom(gameName)))
+	c.AbortWithStatus(200)
 }
 
 /**
@@ -51,25 +30,25 @@ Accepts parameters as sarray of ints.
 Returns http codes
 */
 func action(c *gin.Context) {
-	var params []int
 	token, ok1 := c.Params.Get("room")
 	player, ok2 := c.Params.Get("player")
-	if !(ok1 && ok2) {
+	data, err := c.GetRawData()
+	if !(ok1 && ok2) || err != nil {
 		c.AbortWithStatus(400)
 		return
 	}
-	c.ShouldBindJSON(&params)
+
 	r, ok := rooms.GetRoom(token)
 	if !ok {
 		c.AbortWithStatus(404)
 		return
 	}
-	ok, err := r.TurnHandler(player, params...)
+	err = r.Send(player, data)
 	if err != nil {
 		c.AbortWithStatus(200)
 		return
 	}
-	c.AbortWithStatus(200)
+	c.JSON(200, "")
 }
 
 var wsupgrader = websocket.Upgrader{
@@ -99,37 +78,34 @@ func wshandler(c *gin.Context) {
 	}
 }
 
-/**
-handelr
-Returns string number of player by rooms token
-*/
-func getTurn(c *gin.Context) {
-	token, ok := c.Params.Get("room")
-	if !ok {
-		c.AbortWithStatus(400)
-		return
-	}
-	r, ok := rooms.GetRoom(token)
-	if !ok {
-		c.AbortWithStatus(404)
-		return
-	}
-	c.Writer.Write([]byte(strconv.Itoa(r.Turn)))
-}
-
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.Default()
 
+	// websocket
 	router.GET("/ws/:room/", wshandler)
 	router.GET("/ws/:room/:player/", wshandler)
 
-	router.GET("/api/:room/", getGrid)
-	router.GET("/api/:room/next_turn/", getTurn)
-	router.GET("/new/tic_tac_toe/", findGame("tic_tac_toe"))
-	router.GET("/new/hexapawn/", findGame("hexapawn"))
-	router.POST("/api/:room/turn/:player/", action)
+	router.GET("/new/:game/", findGame)
+	router.POST("/api/:room/action/:player/", action)
+
+	router.StaticFile("/shiii/", "public/template.tmpl")
+	router.Static("/assets", "public/assets/")
+
+	// presentation files ----------------------------
+
+	router.LoadHTMLGlob("public/template.tmpl")
+
+	router.GET("/1/", func(c *gin.Context) {
+		c.HTML(200, "template.tmpl", gin.H{"content": "tic_tac_toe"})
+	})
+
+	router.GET("/2/", func(c *gin.Context) {
+		c.HTML(200, "template.tmpl", gin.H{"content": "chatroulette"})
+	})
+
+	// ------------------------------------------------
 
 	files, err := ioutil.ReadDir("./games")
 
@@ -140,7 +116,7 @@ func main() {
 	for _, f := range files {
 		if f.IsDir() {
 			if games.GetInstance(f.Name()) == nil {
-				fmt.Printf("Warning: Unmapped folder %q in /games/ directory. Please write a case in names.go\n", f.Name())
+				fmt.Printf("Warning: Unmapped folder %q in /games/ directory. Please write a case in /games/names.go\n", f.Name())
 				continue
 			}
 			router.StaticFile("/"+f.Name()+"/", "public/"+f.Name()+"/main.html")

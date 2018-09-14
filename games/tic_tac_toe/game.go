@@ -1,6 +1,9 @@
 package tic_tac_toe
 
-import "errors"
+import (
+	"encoding/json"
+	"errors"
+)
 
 /*
 	https://en.wikipedia.org/wiki/Tic-tac-toe
@@ -8,14 +11,14 @@ import "errors"
 	5x5 field. When player does line of 3 Xs or Os, he wins.
 */
 
-
 var name = "tic_tac_toe"
 
 type Board struct {
 	grid [][]int
+	turn int
 }
 
-func (b Board)GetName() string {
+func (b Board) GetName() string {
 	return name
 }
 
@@ -24,12 +27,13 @@ func (b *Board) Initialize() {
 	for i := 0; i < len(b.grid); i++ {
 		b.grid[i] = make([]int, 5)
 	}
+	b.turn = 1
 }
 
 func (b Board) GetWinner() int {
 	for i := 0; i+2 < len(b.grid); i++ {
 		for j := 0; j+2 < len(b.grid); j++ {
-			for x := 0; x < 3; x++{
+			for x := 0; x < 3; x++ {
 				if b.grid[i+x][j+0] == b.grid[i+x][j+1] && b.grid[i+x][j+2] == b.grid[i+x][j+0] && b.grid[i+x][j+1] != 0 {
 					return b.grid[i+x][j+0]
 				}
@@ -57,14 +61,35 @@ func (b Board) checkPoint(x, y int) bool {
 	return true
 }
 
-func (b *Board) Turn(params... int) (bool, error) {
-	if checker := b.checkPoint(params[1], params[2]); checker {
-		b.grid[params[1]][params[2]] = params[0]
-		return true, nil
+func (b *Board) Action(role int, message json.RawMessage) (string, error) {
+	var params []int
+	if !b.checkTurn(role) {
+		return "", errors.New("not this player's turn")
 	}
-	return true, errors.New("not valid point")
+	if err := json.Unmarshal([]byte(message), &params); err != nil {
+		return "", err
+	}
+	if checker := b.checkPoint(params[0], params[1]); checker {
+		b.grid[params[0]][params[1]] = role
+		if b.turn == 1 {
+			b.turn = 2
+		} else {
+			b.turn = 1
+		}
+		r := response{b.GetWinner(), b.GetTurn(), b.GetGrid()}
+		return r.Marshal(), nil
+	}
+	return "", errors.New("not valid point")
 }
 
 func (b Board) GetGrid() [][]int {
 	return b.grid
+}
+
+func (b Board) checkTurn(role int) bool {
+	return b.turn == role
+}
+
+func (b Board) GetTurn() int {
+	return b.turn
 }

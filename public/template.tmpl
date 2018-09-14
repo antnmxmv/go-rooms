@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    <title>Go-roulette</title>
+
+    <!-- Bootstrap CSS CDN -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.0/css/bootstrap.min.css" integrity="sha384-9gVQ4dYFwwWSjIDZnLEWnxCjeSWFphJiwGPXr1jddIhOegiu1FwO5qRGvFXOdJZ4" crossorigin="anonymous">
+    <!-- Our Custom CSS -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+
+    <script src="../assets/js/go-rooms.js"></script>
+
+</head>
+
+<body>
+<div class="wrapper">
+    <!-- Sidebar  -->
+    <nav id="sidebar">
+        <div class="sidebar-header">
+            <h3>Go-roulette</h3>
+        </div>
+
+        <ul class="list-unstyled components">
+            <li>
+                <a href="/1/">Tic-tac-toe</a>
+            </li>
+            <li>
+                <a href="/2/">ChatRoulette</a>
+            </li>
+        </ul>
+
+        <ul class="list-unstyled">
+            <li class="active">
+                <a href="https://github.com/antnmxmv/go-roulette">GitHub</a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Page Content  -->
+    <div id="content">
+        <iframe frameborder="0" style="width: 100%; height: 100%;" src="/{{ .content }}/" seamless=""></iframe>
+
+    </div>
+
+</div>
+
+</body>
+
+</html>

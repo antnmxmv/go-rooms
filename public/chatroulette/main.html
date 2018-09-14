@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <style>
+        html, body{
+            height: 99%;
+            overflow: hidden;
+        }
+        .all {
+            width: 745px;
+            height: 80%;
+            overflow: auto;
+            overflow-x: hidden;
+            -webkit-box-shadow: inset 0px 23px 40px -38px rgba(0,0,0,0.75);
+            -moz-box-shadow: inset 0px 23px 40px -38px rgba(0,0,0,0.75);
+            box-shadow: inset 0px 23px 40px -38px rgba(0,0,0,0.75);
+        }
+
+        .chat {
+            height: inherit;
+        }
+
+        .message {
+            border: 5px solid #ff4478;
+            margin: 10px;
+            padding: 10px;
+            width: 350px;
+            border-radius: 15px;
+        }
+
+        .my {
+            margin-left: 350px;
+            border: 5px solid #8d80ff;
+        }
+
+        .input {
+            position: fixed;
+            bottom: 0;
+        }
+
+    </style>
+
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/all.css"
+          integrity="sha384-mzrmE5qonljUremFsqc01SB46JvROS7bZs3IO2EmfFsd15uHvIt+Y8vEf7N7fWAU" crossorigin="anonymous">
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="../assets/js/go-rooms.js"></script>
+
+</head>
+
+<body>
+<status>Waiting for another player...</status>
+<div class="all">
+    <div class="chat">
+    </div>
+
+    <div class="input">
+        <textarea style="resize: none; width: 740px; font-size:18px;border: 1px solid black;" rows="3" placeholder="Text here..."></textarea>
+    </div>
+</div>
+</body>
+
+<script>
+    var rooms = Rooms("chatroulette");
+
+    var player_number = 0;
+
+    var turn = 1;
+
+
+    rooms.onconnect = function (data) {
+        $("status").html('Player connected ' + '<a id="refresher" href="' + parent.location.pathname + '">Find new one</a>');
+        player_number = data;
+    };
+
+
+    rooms.onmessage = function (event) {
+        data = $.parseJSON(event.data);
+        console.log(data);
+        if (data["Role"] == player_number) {
+            $(".chat").append('<div class="message my"><b>You</b><br>' + data["Message"] + '</div>');
+        }else{
+            $(".chat").append('<div class="message"><b>Somebody</b><br>' + data["Message"] + '</div>');
+        }
+        $('.all').animate({
+            scrollTop: $(".message:last-child").offset().top
+        }, 'fast');
+    };
+
+    rooms.onclose = function (event) {
+        $("status").html('Player disconnected ' + '<a id="refresher" href="' + parent.location.pathname + '">Find new one</a>');
+    };
+
+
+    rooms.connect();
+
+
+    $("textarea").keypress(function (e) {
+        if (e.which == 13) {
+            if(player_number == 0){
+                e.preventDefault();
+                return;
+            }
+            rooms.send($(this).val());
+            console.log($(this).val());
+            $(this).val("");
+            e.preventDefault();
+        }
+    });
+
+    $(document).ready(function () {
+        $("textarea").focus();
+    });
+</script>
+
+</html>

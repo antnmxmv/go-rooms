@@ -2,6 +2,7 @@ package rooms
 
 import (
 	"github.com/gorilla/websocket"
+	"time"
 )
 
 type Client struct {
@@ -24,6 +25,7 @@ func (c Client) closedConnection() bool {
 	if c.pingConn == nil {
 		return false
 	}
+	c.pingConn.SetReadDeadline(time.Now().Add(time.Second * 2))
 	c.pingConn.WriteMessage(websocket.BinaryMessage, []byte{1})
 	_, _, err := c.pingConn.ReadMessage()
 	if err != nil {

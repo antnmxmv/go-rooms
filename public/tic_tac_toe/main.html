@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Title</title>
 
+    <base target="_parent">
+
     <style>
         .box {
             background-color: gainsboro;
@@ -38,12 +40,14 @@
           integrity="sha384-mzrmE5qonljUremFsqc01SB46JvROS7bZs3IO2EmfFsd15uHvIt+Y8vEf7N7fWAU" crossorigin="anonymous">
 
     <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="../assets/js/go-rooms.js"></script>
 </head>
 <body>
 
 <next>Wait please...</next>
 <div class="overlay" id="wallaper"></div>
-<div class="overlay" style="position: absolute; width: 420px; height: 420px; text-align: center; vertical-align: center; color: #ffffff">
+<div class="overlay"
+     style="position: absolute; width: 420px; height: 420px; text-align: center; vertical-align: center; color: #ffffff">
     <h2 style="width: 220px; margin-left: 90px; margin-top: 150px">Another player has disconnected</h2>
 </div>
 <table>
@@ -91,38 +95,75 @@
 <br><br>
 <winner></winner>
 
-<a id="refresher" href="/tic_tac_toe/">Find new game</a>
+<a id="refresher" href="">Find new game</a>
 
 <script>
+    var rooms = Rooms("tic_tac_toe");
+
+    var player_number = 0;
+
+    var turn = 1;
+
+    $("#refresher").attr("href", parent.location.pathname);
+
+    rooms.onconnect = function (data) {
+        $("status").html("Player connected");
+        player_number = data;
+        showTurn();
+    };
+
+
+    rooms.onmessage = function (event) {
+        data = $.parseJSON(event.data);
+        turn = data["Turn"];
+        showTurn();
+        if (data["Winner"] != 0) {
+            $("winner").html("We got a wwwwwwwwwwwwwwiner!!!<br> And it's " + (this.game.Role == data["Winner"] ? "<b style='color:green'>You</b>!" : "<b style='color:red'>not you</b>:("));
+            $("next").text("End of game!");
+            $(".box").unbind();
+            $("#refresher").show();
+        }
+        for (var i = 0; i < data["Grid"].length; i++) {
+            for (var j = 0; j < data["Grid"].length; j++) {
+                $("#" + i + "-" + j).html(getIcon(data["Grid"][i][j]))
+            }
+        }
+
+    };
+
+    rooms.onclose = function (event) {
+        if (event.wasClean) {
+            $(".overlay").show();
+            $("#wallaper").fadeTo("slow", 0.6);
+        } else {
+            $(".overlay").show();
+            $("#wallaper").fadeTo("slow", 0.6);
+        }
+    };
+
+
+    rooms.connect();
+
+
+    $(".box").click(function () {
+        if (turn == player_number) {
+            var points = [parseInt($(this).attr("id").split("-")[0]), parseInt($(this).attr("id").split("-")[1])];
+            rooms.send(points);
+        }
+    });
 
     function showTurn() {
-        $.ajax({
-            url: "http://" + location.host + "/api/" + game.Token + "/next_turn/",
-            success: function (data) {
-                if ($("winner").text() != "") {
-                    return;
-                } else if (data == game.Role) {
-                    $("next").text("Your turn. Make right decision!");
-                } else if (data != game.Role){
-                    $("next").text("Wait for your turn.");
-                }else {
-                    $("next").text("Wait please...");
-                }
-            }
-        });
+        if ($("winner").text() != "") {
+            return;
+        } else if (turn == player_number) {
+            $("next").text("Your turn. Make right decision!");
+        } else if (turn != player_number) {
+            $("next").text("Wait for your turn.");
+        } else {
+            $("next").text("Wait please...");
+        }
+
     }
-
-    function getSocket(str) {
-        return new WebSocket(str);
-    }
-
-    var game = "";
-
-    var msg_socket = null;
-
-    var ping_socket = null;
-
-    var player_token = "";
 
     function getIcon(role) {
         if (role == 1) {
@@ -132,72 +173,6 @@
         }
         return ' ';
     }
-
-    $(document).ready(function () {
-        $.ajax({
-            url: "http://" + location.host + "/new/tic_tac_toe/",
-            cache: false,
-            sync: true,
-            success: function (data) {
-                game = data;
-                msg_socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/");
-                msg_socket.onclose = function (event) {
-                    if (event.wasClean) {
-                        $(".overlay").show();
-                        $("#wallaper").fadeTo("slow", 0.6);
-                    } else {
-                        $(".overlay").show();
-                        $("#wallaper").fadeTo("slow", 0.6);
-                    }
-                };
-
-                msg_socket.onmessage = function (event) {
-                    player_token = event.data;
-                    ping_socket = getSocket("ws://" + location.host + "/ws/" + game.Token + "/" + player_token + "/");
-                    ping_socket.onmessage = function () {
-                        ping_socket.send(1);
-                    };
-                    msg_socket.onmessage = function (event) {
-                        if (event.data[0] == 'W') {
-                            $("winner").html("We got a wwwwwwwwwwwwwwiner!!!<br> And it's " + (game.Role == event.data[2] ? "<b style='color:green'>You</b>!" : "<b style='color:red'>not you</b>:("));
-                            $("next").text("End of game!");
-                            $(".box").unbind();
-                            $("#refresher").show();
-                        } else if(event.data == "Connected"){
-                            $("status").html("Player connected");
-                            showTurn();
-                        } else {
-                            showTurn();
-                            data = $.parseJSON(event.data);
-                            for (var i = 0; i < data.length; i++) {
-                                for (var j = 0; j < data.length; j++) {
-                                    $("#" + i + "-" + j).html(getIcon(data[i][j]))
-                                }
-                            }
-                        }
-                    };
-                };
-            }
-        });
-
-        $(".box").click(function () {
-            var temp = $(this).html();
-            var turn = [parseInt($(this).attr("id").split("-")[0]), parseInt($(this).attr("id").split("-")[1])];
-            $(this).html('<img src="assets/img/loading.gif">');
-            $.ajax({
-                url: "http://" + location.host + "/api/" + game.Token + "/turn/" + player_token + "/",
-                data: JSON.stringify(turn),
-                cache: false,
-                type: "POST",
-                contentType: "application/json",
-                error: $(this).html(temp),
-                success: function (res) {
-                    $(this).html(toString(game.Role));
-                }
-            });
-        });
-    });
-
 </script>
 
 </body>
